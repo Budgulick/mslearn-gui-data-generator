@@ -1,0 +1,19 @@
+# Core GUI Framework
+customtkinter==5.2.2
+tkinter-tooltip==2.2.0
+
+# Backend Dependencies (from original project)
+requests==2.31.0
+beautifulsoup4==4.12.3
+lxml==5.1.0
+
+# Development Dependencies
+pytest==8.0.0
+pytest-cov==4.1.0
+black==24.1.1
+flake8==7.0.0
+mypy==1.8.0
+
+# Additional Utilities
+Pillow==10.2.0  # For image handling in GUI
+python-dotenv==1.0.0  # For environment variables
