@@ -1,9 +1,11 @@
 """
 Main window for MS Learn GUI Data Generator
-Phase 1.2 implementation
+Phase 1.2 implementation with enhanced layout and menu system
 """
 
 import customtkinter as ctk
+import tkinter as tk
+from tkinter import messagebox, filedialog
 from pathlib import Path
 import sys
 
@@ -15,87 +17,589 @@ from config.settings import Settings
 class MSLearnGUIApp:
     """
     Main application window for MS Learn Data Generator
+    Enhanced with advanced layout, menu system, and tabbed interface
     """
     
     def __init__(self):
         """Initialize the main application window"""
-        # Set appearance mode and color theme
-        ctk.set_appearance_mode("system")  # Modes: system, light, dark
-        ctk.set_default_color_theme("blue")  # Themes: blue, dark-blue, green
-        
-        # Initialize settings
+        # Set appearance mode and color theme from settings
         self.settings = Settings()
+        
+        theme = self.settings.get("theme", "system")
+        color_theme = self.settings.get("color_theme", "blue")
+        
+        ctk.set_appearance_mode(theme)
+        ctk.set_default_color_theme(color_theme)
         
         # Create main window
         self.root = ctk.CTk()
         self.root.title("MS Learn Training Data Generator")
         
-        # Set window size and position
+        # Set window icon (using default tkinter icon for now)
+        try:
+            # This can be enhanced with a custom icon later
+            self.root.iconname("MS Learn Generator")
+        except:
+            pass  # Icon setting is optional
+        
+        # Setup window configuration
         self._setup_window_geometry()
         
-        # Setup UI components
-        self._setup_ui()
+        # Create menu bar
+        self._create_menu_bar()
         
-        # Bind window close event
-        self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
+        # Setup main UI layout
+        self._setup_main_layout()
+        
+        # Setup status bar
+        self._setup_status_bar()
+        
+        # Bind events
+        self._bind_events()
+        
+        # Initialize component state
+        self.processing_active = False
+        self.current_urls = []
+        
+        # Update status
+        self._update_status("Ready")
     
     def _setup_window_geometry(self):
         """Setup window size and position from settings"""
         window_size = self.settings.get("window_size", [1200, 800])
+        window_pos = self.settings.get("window_position", None)
         
-        # Calculate center position
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
-        x = (screen_width - window_size[0]) // 2
-        y = (screen_height - window_size[1]) // 2
+        # Set minimum size
+        self.root.minsize(900, 700)
         
-        self.root.geometry(f"{window_size[0]}x{window_size[1]}+{x}+{y}")
-        self.root.minsize(800, 600)
+        if window_pos:
+            # Use saved position
+            self.root.geometry(f"{window_size[0]}x{window_size[1]}+{window_pos[0]}+{window_pos[1]}")
+        else:
+            # Center on screen
+            screen_width = self.root.winfo_screenwidth()
+            screen_height = self.root.winfo_screenheight()
+            x = (screen_width - window_size[0]) // 2
+            y = (screen_height - window_size[1]) // 2
+            self.root.geometry(f"{window_size[0]}x{window_size[1]}+{x}+{y}")
     
-    def _setup_ui(self):
-        """Setup the main UI components"""
-        # Create main container frame
-        self.main_frame = ctk.CTkFrame(self.root)
-        self.main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+    def _create_menu_bar(self):
+        """Create the application menu bar"""
+        # Create menu bar frame
+        self.menu_frame = ctk.CTkFrame(self.root, height=30)
+        self.menu_frame.pack(fill="x", padx=5, pady=(5, 0))
+        self.menu_frame.pack_propagate(False)
         
-        # Title label
+        # File menu button
+        self.file_menu_btn = ctk.CTkOptionMenu(
+            self.menu_frame,
+            values=["New Session", "Open URL List...", "Save URL List...", "separator", "Exit"],
+            command=self._handle_file_menu,
+            width=80
+        )
+        self.file_menu_btn.set("File")
+        self.file_menu_btn.pack(side="left", padx=(10, 5), pady=5)
+        
+        # Edit menu button
+        self.edit_menu_btn = ctk.CTkOptionMenu(
+            self.menu_frame,
+            values=["Add URL", "Remove Selected", "Clear All", "separator", "Preferences..."],
+            command=self._handle_edit_menu,
+            width=80
+        )
+        self.edit_menu_btn.set("Edit")
+        self.edit_menu_btn.pack(side="left", padx=5, pady=5)
+        
+        # View menu button
+        self.view_menu_btn = ctk.CTkOptionMenu(
+            self.menu_frame,
+            values=["Light Mode", "Dark Mode", "System Mode", "separator", "Show Log", "Show Statistics"],
+            command=self._handle_view_menu,
+            width=80
+        )
+        self.view_menu_btn.set("View")
+        self.view_menu_btn.pack(side="left", padx=5, pady=5)
+        
+        # Help menu button
+        self.help_menu_btn = ctk.CTkOptionMenu(
+            self.menu_frame,
+            values=["User Guide", "Keyboard Shortcuts", "separator", "About"],
+            command=self._handle_help_menu,
+            width=80
+        )
+        self.help_menu_btn.set("Help")
+        self.help_menu_btn.pack(side="left", padx=5, pady=5)
+        
+        # Add title in center
         self.title_label = ctk.CTkLabel(
-            self.main_frame,
+            self.menu_frame,
             text="MS Learn Training Data Generator",
-            font=ctk.CTkFont(size=24, weight="bold")
+            font=ctk.CTkFont(size=16, weight="bold")
         )
-        self.title_label.pack(pady=(10, 20))
+        self.title_label.pack(side="right", padx=10, pady=5)
+    
+    def _setup_main_layout(self):
+        """Setup the main application layout with tabs"""
+        # Create main container
+        self.main_container = ctk.CTkFrame(self.root)
+        self.main_container.pack(fill="both", expand=True, padx=10, pady=5)
         
-        # Placeholder for components (Phase 1.3+)
-        self.placeholder_label = ctk.CTkLabel(
-            self.main_frame,
-            text="Components will be added in Phase 1.3+",
-            font=ctk.CTkFont(size=14)
+        # Create tabbed interface
+        self.tab_view = ctk.CTkTabview(self.main_container)
+        self.tab_view.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Create tabs
+        self.processing_tab = self.tab_view.add("Processing")
+        self.results_tab = self.tab_view.add("Results") 
+        self.settings_tab = self.tab_view.add("Settings")
+        
+        # Setup Processing tab layout
+        self._setup_processing_tab()
+        
+        # Setup Results tab layout
+        self._setup_results_tab()
+        
+        # Setup Settings tab layout
+        self._setup_settings_tab()
+    
+    def _setup_processing_tab(self):
+        """Setup the main processing tab layout"""
+        # Create main sections using grid layout
+        self.processing_tab.grid_columnconfigure(1, weight=1)
+        self.processing_tab.grid_rowconfigure(1, weight=1)
+        
+        # URL Management section (left side)
+        self.url_section = ctk.CTkFrame(self.processing_tab)
+        self.url_section.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 5), pady=5)
+        self.url_section.grid_columnconfigure(0, weight=1)
+        
+        url_title = ctk.CTkLabel(
+            self.url_section,
+            text="URL Management",
+            font=ctk.CTkFont(size=16, weight="bold")
         )
-        self.placeholder_label.pack(pady=50)
+        url_title.grid(row=0, column=0, pady=(10, 5), padx=10, sticky="w")
         
-        # Status bar at bottom
-        self.status_frame = ctk.CTkFrame(self.root, height=30)
+        # Placeholder for URL list (Phase 1.3)
+        self.url_placeholder = ctk.CTkLabel(
+            self.url_section,
+            text="URL list component\\nwill be added in Phase 1.3",
+            font=ctk.CTkFont(size=12),
+            text_color="gray"
+        )
+        self.url_placeholder.grid(row=1, column=0, pady=20, padx=20)
+        
+        # Settings section (top right)
+        self.settings_section = ctk.CTkFrame(self.processing_tab)
+        self.settings_section.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+        self.settings_section.grid_columnconfigure((0, 1), weight=1)
+        
+        settings_title = ctk.CTkLabel(
+            self.settings_section,
+            text="Processing Settings",
+            font=ctk.CTkFont(size=16, weight="bold")
+        )
+        settings_title.grid(row=0, column=0, columnspan=2, pady=(10, 5), padx=10, sticky="w")
+        
+        # Output folder setting
+        ctk.CTkLabel(self.settings_section, text="Output Folder:").grid(
+            row=1, column=0, pady=5, padx=10, sticky="w"
+        )
+        
+        self.output_folder_var = tk.StringVar(value=self.settings.get("default_output_dir", ""))
+        self.output_folder_entry = ctk.CTkEntry(
+            self.settings_section,
+            textvariable=self.output_folder_var,
+            width=300
+        )
+        self.output_folder_entry.grid(row=1, column=1, pady=5, padx=5, sticky="ew")
+        
+        self.browse_btn = ctk.CTkButton(
+            self.settings_section,
+            text="Browse",
+            command=self._browse_output_folder,
+            width=80
+        )
+        self.browse_btn.grid(row=1, column=2, pady=5, padx=(5, 10))
+        
+        # Category setting
+        ctk.CTkLabel(self.settings_section, text="Category:").grid(
+            row=2, column=0, pady=5, padx=10, sticky="w"
+        )
+        
+        self.category_var = tk.StringVar(value="General")
+        self.category_menu = ctk.CTkOptionMenu(
+            self.settings_section,
+            variable=self.category_var,
+            values=self.settings.get("recent_categories", ["General", "Active_Directory", "DNS", "PowerShell"])
+        )
+        self.category_menu.grid(row=2, column=1, columnspan=2, pady=5, padx=5, sticky="ew")
+        
+        # Progress and Control section (bottom right)
+        self.control_section = ctk.CTkFrame(self.processing_tab)
+        self.control_section.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
+        self.control_section.grid_columnconfigure(0, weight=1)
+        self.control_section.grid_rowconfigure(1, weight=1)
+        
+        control_title = ctk.CTkLabel(
+            self.control_section,
+            text="Progress & Control",
+            font=ctk.CTkFont(size=16, weight="bold")
+        )
+        control_title.grid(row=0, column=0, pady=(10, 5), padx=10, sticky="w")
+        
+        # Progress placeholder (Phase 1.5)
+        self.progress_placeholder = ctk.CTkLabel(
+            self.control_section,
+            text="Progress tracking and control\\ncomponents will be added\\nin Phase 1.5",
+            font=ctk.CTkFont(size=12),
+            text_color="gray"
+        )
+        self.progress_placeholder.grid(row=1, column=0, pady=20, padx=20)
+        
+        # Control buttons
+        self.button_frame = ctk.CTkFrame(self.control_section)
+        self.button_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=10)
+        self.button_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        
+        self.start_btn = ctk.CTkButton(
+            self.button_frame,
+            text="▶ Start Processing",
+            command=self._start_processing,
+            state="disabled"  # Disabled until Phase 1.5
+        )
+        self.start_btn.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
+        
+        self.pause_btn = ctk.CTkButton(
+            self.button_frame,
+            text="⏸ Pause",
+            command=self._pause_processing,
+            state="disabled"
+        )
+        self.pause_btn.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+        
+        self.stop_btn = ctk.CTkButton(
+            self.button_frame,
+            text="⏹ Stop",
+            command=self._stop_processing,
+            state="disabled"
+        )
+        self.stop_btn.grid(row=0, column=2, padx=5, pady=5, sticky="ew")
+    
+    def _setup_results_tab(self):
+        """Setup the results tab layout"""
+        # Results section
+        results_title = ctk.CTkLabel(
+            self.results_tab,
+            text="Processing Results",
+            font=ctk.CTkFont(size=18, weight="bold")
+        )
+        results_title.pack(pady=(20, 10))
+        
+        # Results placeholder
+        self.results_placeholder = ctk.CTkLabel(
+            self.results_tab,
+            text="Results preview and analytics\\nwill be available after\\nPhase 2 implementation",
+            font=ctk.CTkFont(size=14),
+            text_color="gray"
+        )
+        self.results_placeholder.pack(pady=50)
+    
+    def _setup_settings_tab(self):
+        """Setup the settings tab layout"""
+        # Settings section
+        settings_title = ctk.CTkLabel(
+            self.settings_tab,
+            text="Application Settings",
+            font=ctk.CTkFont(size=18, weight="bold")
+        )
+        settings_title.pack(pady=(20, 20))
+        
+        # Settings frame
+        settings_frame = ctk.CTkFrame(self.settings_tab)
+        settings_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        # Appearance settings
+        appearance_frame = ctk.CTkFrame(settings_frame)
+        appearance_frame.pack(fill="x", padx=20, pady=10)
+        
+        ctk.CTkLabel(
+            appearance_frame,
+            text="Appearance",
+            font=ctk.CTkFont(size=16, weight="bold")
+        ).pack(anchor="w", padx=10, pady=(10, 5))
+        
+        # Theme selection
+        theme_frame = ctk.CTkFrame(appearance_frame)
+        theme_frame.pack(fill="x", padx=10, pady=5)
+        
+        ctk.CTkLabel(theme_frame, text="Theme:").pack(side="left", padx=10)
+        
+        self.theme_var = tk.StringVar(value=self.settings.get("theme", "system"))
+        self.theme_menu = ctk.CTkOptionMenu(
+            theme_frame,
+            variable=self.theme_var,
+            values=["system", "light", "dark"],
+            command=self._change_theme
+        )
+        self.theme_menu.pack(side="left", padx=10)
+        
+        # Color theme selection
+        color_frame = ctk.CTkFrame(appearance_frame)
+        color_frame.pack(fill="x", padx=10, pady=5)
+        
+        ctk.CTkLabel(color_frame, text="Color Theme:").pack(side="left", padx=10)
+        
+        self.color_theme_var = tk.StringVar(value=self.settings.get("color_theme", "blue"))
+        self.color_theme_menu = ctk.CTkOptionMenu(
+            color_frame,
+            variable=self.color_theme_var,
+            values=["blue", "dark-blue", "green"],
+            command=self._change_color_theme
+        )
+        self.color_theme_menu.pack(side="left", padx=10)
+        
+        # Processing settings
+        processing_frame = ctk.CTkFrame(settings_frame)
+        processing_frame.pack(fill="x", padx=20, pady=10)
+        
+        ctk.CTkLabel(
+            processing_frame,
+            text="Processing",
+            font=ctk.CTkFont(size=16, weight="bold")
+        ).pack(anchor="w", padx=10, pady=(10, 5))
+        
+        # Delay setting
+        delay_frame = ctk.CTkFrame(processing_frame)
+        delay_frame.pack(fill="x", padx=10, pady=5)
+        
+        ctk.CTkLabel(delay_frame, text="Delay between requests (seconds):").pack(side="left", padx=10)
+        
+        self.delay_var = tk.StringVar(value=str(self.settings.get("delay_seconds", 2)))
+        self.delay_entry = ctk.CTkEntry(delay_frame, textvariable=self.delay_var, width=60)
+        self.delay_entry.pack(side="right", padx=10)
+    
+    def _setup_status_bar(self):
+        """Setup the status bar at the bottom"""
+        self.status_frame = ctk.CTkFrame(self.root, height=35)
         self.status_frame.pack(fill="x", side="bottom", padx=10, pady=(0, 10))
+        self.status_frame.pack_propagate(False)
         
+        # Status sections
         self.status_label = ctk.CTkLabel(
             self.status_frame,
             text="Ready",
             font=ctk.CTkFont(size=12)
         )
-        self.status_label.pack(side="left", padx=10)
+        self.status_label.pack(side="left", padx=10, pady=5)
+        
+        # Progress info (right side)
+        self.progress_info_label = ctk.CTkLabel(
+            self.status_frame,
+            text="0 URLs | 0 processed | 0 failed",
+            font=ctk.CTkFont(size=12),
+            text_color="gray"
+        )
+        self.progress_info_label.pack(side="right", padx=10, pady=5)
+    
+    def _bind_events(self):
+        """Bind keyboard shortcuts and window events"""
+        self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
+        
+        # Keyboard shortcuts
+        self.root.bind('<Control-n>', lambda e: self._handle_file_menu("New Session"))
+        self.root.bind('<Control-o>', lambda e: self._handle_file_menu("Open URL List..."))
+        self.root.bind('<Control-s>', lambda e: self._handle_file_menu("Save URL List..."))
+        self.root.bind('<Control-q>', lambda e: self._on_closing())
+        self.root.bind('<F1>', lambda e: self._handle_help_menu("User Guide"))
+    
+    def _handle_file_menu(self, choice):
+        """Handle file menu selections"""
+        if choice == "New Session":
+            self._new_session()
+        elif choice == "Open URL List...":
+            self._open_url_list()
+        elif choice == "Save URL List...":
+            self._save_url_list()
+        elif choice == "Exit":
+            self._on_closing()
+    
+    def _handle_edit_menu(self, choice):
+        """Handle edit menu selections"""
+        if choice == "Add URL":
+            self._add_url_dialog()
+        elif choice == "Remove Selected":
+            self._remove_selected_urls()
+        elif choice == "Clear All":
+            self._clear_all_urls()
+        elif choice == "Preferences...":
+            self.tab_view.set("Settings")
+    
+    def _handle_view_menu(self, choice):
+        """Handle view menu selections"""
+        if choice in ["Light Mode", "Dark Mode", "System Mode"]:
+            theme_map = {"Light Mode": "light", "Dark Mode": "dark", "System Mode": "system"}
+            self._change_theme(theme_map[choice])
+        elif choice == "Show Log":
+            # Will be implemented in Phase 1.6
+            self._update_status("Log view will be available in Phase 1.6")
+        elif choice == "Show Statistics":
+            # Will be implemented in Phase 2
+            self._update_status("Statistics will be available in Phase 2")
+    
+    def _handle_help_menu(self, choice):
+        """Handle help menu selections"""
+        if choice == "User Guide":
+            messagebox.showinfo(
+                "User Guide",
+                "MS Learn Training Data Generator\\n\\n"
+                "This application extracts high-quality training data from Microsoft Learn documentation.\\n\\n"
+                "Current Phase: 1.2 - Main Window Framework\\n"
+                "Next: Phase 1.3 - URL Management Component"
+            )
+        elif choice == "Keyboard Shortcuts":
+            messagebox.showinfo(
+                "Keyboard Shortcuts",
+                "File Operations:\\n"
+                "Ctrl+N - New Session\\n"
+                "Ctrl+O - Open URL List\\n"
+                "Ctrl+S - Save URL List\\n"
+                "Ctrl+Q - Exit\\n\\n"
+                "Help:\\n"
+                "F1 - User Guide"
+            )
+        elif choice == "About":
+            messagebox.showinfo(
+                "About",
+                "MS Learn Training Data Generator\\n"
+                "Version: 0.1.1 (Phase 1.2)\\n\\n"
+                "A professional GUI for extracting high-quality training data\\n"
+                "from Microsoft Learn documentation.\\n\\n"
+                "Built with CustomTkinter\\n"
+                "© 2025 MS Learn GUI Team"
+            )
+    
+    def _browse_output_folder(self):
+        """Browse for output folder"""
+        folder = filedialog.askdirectory(
+            title="Select Output Folder",
+            initialdir=self.output_folder_var.get() or str(Path.home())
+        )
+        if folder:
+            self.output_folder_var.set(folder)
+            self.settings.set("default_output_dir", folder)
+            self._update_status(f"Output folder: {folder}")
+    
+    def _change_theme(self, theme):
+        """Change application theme"""
+        ctk.set_appearance_mode(theme)
+        self.settings.set("theme", theme)
+        self.theme_var.set(theme)
+        self._update_status(f"Theme changed to {theme}")
+    
+    def _change_color_theme(self, color_theme):
+        """Change color theme (requires restart)"""
+        self.settings.set("color_theme", color_theme)
+        self._update_status(f"Color theme changed to {color_theme} (restart required)")
+    
+    def _new_session(self):
+        """Start a new session"""
+        self.current_urls = []
+        self._update_status("New session started")
+    
+    def _open_url_list(self):
+        """Open URL list from file"""
+        file_path = filedialog.askopenfilename(
+            title="Open URL List",
+            filetypes=[("Text files", "*.txt"), ("CSV files", "*.csv"), ("All files", "*.*")]
+        )
+        if file_path:
+            # This will be implemented in Phase 2.1
+            self.settings.add_recent_url_list(file_path)
+            self._update_status(f"URL list feature will be available in Phase 2.1")
+    
+    def _save_url_list(self):
+        """Save current URL list"""
+        if not self.current_urls:
+            self._update_status("No URLs to save")
+            return
+        
+        file_path = filedialog.asksaveasfilename(
+            title="Save URL List",
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("CSV files", "*.csv")]
+        )
+        if file_path:
+            # This will be implemented in Phase 2.1
+            self._update_status(f"URL list saving will be available in Phase 2.1")
+    
+    def _add_url_dialog(self):
+        """Show add URL dialog"""
+        # This will be implemented in Phase 1.3
+        self._update_status("Add URL dialog will be available in Phase 1.3")
+    
+    def _remove_selected_urls(self):
+        """Remove selected URLs"""
+        # This will be implemented in Phase 1.3
+        self._update_status("URL removal will be available in Phase 1.3")
+    
+    def _clear_all_urls(self):
+        """Clear all URLs"""
+        self.current_urls = []
+        self._update_status("All URLs cleared")
+    
+    def _start_processing(self):
+        """Start URL processing"""
+        # This will be implemented in Phase 1.5
+        self._update_status("Processing control will be available in Phase 1.5")
+    
+    def _pause_processing(self):
+        """Pause processing"""
+        # This will be implemented in Phase 1.5
+        self._update_status("Processing control will be available in Phase 1.5")
+    
+    def _stop_processing(self):
+        """Stop processing"""
+        # This will be implemented in Phase 1.5
+        self._update_status("Processing control will be available in Phase 1.5")
+    
+    def _update_status(self, message):
+        """Update status bar message"""
+        self.status_label.configure(text=message)
+        
+        # Update progress info
+        url_count = len(self.current_urls)
+        processed_count = 0  # Will be tracked in Phase 1.5
+        failed_count = 0     # Will be tracked in Phase 1.5
+        
+        self.progress_info_label.configure(
+            text=f"{url_count} URLs | {processed_count} processed | {failed_count} failed"
+        )
     
     def _on_closing(self):
         """Handle window closing event"""
-        # Save window geometry
+        # Save window geometry and position
         geometry = self.root.geometry()
-        if '+' in geometry:
-            size_str = geometry.split('+')[0]
-            if 'x' in size_str:
-                width, height = map(int, size_str.split('x'))
-                self.settings.set("window_size", [width, height])
+        if '+' in geometry and 'x' in geometry:
+            try:
+                size_and_pos = geometry.split('+')
+                size_str = size_and_pos[0]
+                pos_x, pos_y = int(size_and_pos[1]), int(size_and_pos[2])
+                
+                if 'x' in size_str:
+                    width, height = map(int, size_str.split('x'))
+                    self.settings.set("window_size", [width, height])
+                    self.settings.set("window_position", [pos_x, pos_y])
+            except (ValueError, IndexError):
+                pass  # Keep existing settings if parsing fails
         
-        # Save settings and close
+        # Save other settings
+        try:
+            self.settings.set("delay_seconds", int(self.delay_var.get()))
+        except ValueError:
+            pass  # Keep existing setting if invalid
+        
+        # Save and exit
         self.settings.save()
         self.root.destroy()
     
